@@ -1,0 +1,20 @@
+# Auto-detect text files and perform LF normalization
+* text=auto
+
+# Declare files that will always have LF line endings
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.js text eol=lf
+
+# Explicitly declare binary files - Git will NEVER touch or corrupt these
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.aar binary
