@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Motlatsi AI</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#0056b3" />
+    <script>
+      // Polyfill for process.env (common in some Node-heavy libraries) must be as early as possible
+      window.process = { env: { NODE_ENV: 'development' } };
+
+      // Early error capture for debugging
+      window.onerror = function(msg, url, line, col, error) {
+        console.error('App Load Error:', msg, 'at', url + ':' + line + ':' + col);
+        // If we have an error before the root is rendered, we can show a simple message
+        const root = document.getElementById('root');
+        if (root && (root.innerHTML === '' || root.innerHTML.includes('Initializing'))) {
+          root.innerHTML = '<div style="padding: 20px; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; margin: 20px; font-family: sans-serif;">' +
+            '<h2 style="margin-top: 0;">Application Error</h2>' +
+            '<p>The application failed to load. This might be due to a script error or connection issue.</p>' +
+            '<p style="font-size: 12px; font-family: monospace;">' + msg + '</p>' +
+            '<button onclick="localStorage.clear(); location.reload();" style="padding: 8px 16px; background: #c82333; color: white; border: none; border-radius: 4px; cursor: pointer;">Reset Data & Reload</button>' +
+            '</div>';
+        }
+        return false;
+      };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Gloria+Hallelujah&family=Epilogue:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Lexend', 'sans-serif'],
+              display: ['Epilogue', 'sans-serif'],
+              chalk: ['"Gloria Hallelujah"', 'cursive'],
+            },
+            colors: {
+              teacherBlue: '#0056b3',
+              growthGreen: '#28a745',
+              basothoBlanketRed: '#c1272d',
+              lesothoBlue: '#00205b',
+              chalkboard: '#1a472a',
+              primary: '#eca413', 
+              'background-light': '#f8f7f6',
+              'background-dark': '#221c10',
+            },
+            padding: {
+              'safe': 'env(safe-area-inset-bottom)',
+              'safe-top': 'env(safe-area-inset-top)',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Mobile App Reset */
+      html, body {
+        height: 100%;
+        overflow: hidden; /* Let the app container handle scroll */
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        user-select: none; /* Prevent text selection like a native app */
+        -webkit-user-select: none;
+      }
+      
+      /* Allow text selection only on inputs and specific text areas if needed */
+      input, textarea, [contenteditable="true"] {
+        user-select: text;
+        -webkit-user-select: text;
+      }
+
+      #root {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      .chalk-effect {
+        filter: drop-shadow(1px 1px 0px rgba(255,255,255,0.3));
+      }
+      .dyslexic-mode, .dyslexic-mode * {
+          letter-spacing: 0.15em !important;
+          word-spacing: 0.3em !important;
+          line-height: 1.8 !important;
+          font-family: 'Lexend', sans-serif !important;
+      }
+      .flashcard-shadow {
+          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+      }
+      .ios-shadow {
+          box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.03);
+      }
+      
+      /* Utility for hiding scrollbar but allowing scroll */
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+    </style>
+
+</head>
+  <body class="bg-[#F8FAFC] text-slate-900">
+    <div id="root">
+      <div class="fallback-wrapper" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; width: 100vw; background: #fafeff; font-family: 'Lexend', -apple-system, sans-serif; position: relative; overflow: hidden; margin: 0; padding: 0;">
+        <!-- Glowing gradient backdrops using pure CSS blurs -->
+        <div style="position: absolute; top: -15%; left: -10%; width: 50%; height: 50%; background: radial-gradient(circle, rgba(42,245,152,0.08) 0%, rgba(255,255,255,0) 70%); border-radius: 50%; filter: blur(50px); pointer-events: none;"></div>
+        <div style="position: absolute; bottom: -15%; right: -10%; width: 50%; height: 50%; background: radial-gradient(circle, rgba(0,158,253,0.12) 0%, rgba(255,255,255,0) 70%); border-radius: 50%; filter: blur(50px); pointer-events: none;"></div>
+
+        <div style="position: relative; z-index: 10; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <!-- Centered Holographic Ring and Spinner -->
+          <div style="position: relative; width: 90px; height: 90px; margin-bottom: 32px; display: flex; justify-content: center; align-items: center;">
+            <!-- Outer slowly rotating dashed orbital -->
+            <div class="spinning-ring-slow" style="position: absolute; inset: -28px; border: 2px dashed rgba(0, 158, 253, 0.2); border-radius: 50%; animation: spin 15s linear infinite;"></div>
+            
+            <!-- Inner counter-rotating thin solid orbital -->
+            <div class="spinning-ring-reverse" style="position: absolute; inset: -14px; border: 1px solid rgba(42, 245, 152, 0.3); border-radius: 50%; animation: spin-rev 10s linear infinite;"></div>
+            
+            <!-- Elegant glass container with genuine Motlatsi logo inside -->
+            <div style="width: 64px; height: 64px; border-radius: 20px; background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 32px rgba(0, 158, 253, 0.08); border: 1px solid rgba(255, 255, 255, 0.6); display: flex; align-items: center; justify-content: center; z-index: 10;">
+              <!-- Authentic Motlatsi Logo SVG -->
+              <svg width="42" height="42" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="fallback-logo-grad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#2AF598" />
+                    <stop offset="100%" stop-color="#009EFD" />
+                  </linearGradient>
+                </defs>
+                <g>
+                  <path d="M 35 12 H 12 V 38 H 35" fill="none" stroke="url(#fallback-logo-grad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                  <text x="23.5" y="32" text-anchor="middle" font-family="'Lexend', sans-serif" font-weight="400" font-size="18" fill="url(#fallback-logo-grad)">M</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <!-- App Branding text -->
+          <h1 style="font-size: 22px; font-weight: 800; color: #1e293b; letter-spacing: -0.02em; margin: 0; font-family: 'Lexend', sans-serif;">Motlatsi <span style="background: linear-gradient(135deg, #2AF598 0%, #009EFD 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AI</span></h1>
+          
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px;">
+            <div class="pulsing-dot" style="width: 6px; height: 6px; background-color: #2AF598; border-radius: 50%; animation: pulse-light 1.5s infinite ease-in-out;"></div>
+            <p style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.35em; margin: 0; font-family: monospace;">Powering Education</p>
+          </div>
+        </div>
+
+        <style>
+          @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+          }
+          @keyframes spin-rev { 
+            0% { transform: rotate(360deg); } 
+            100% { transform: rotate(0deg); } 
+          }
+          @keyframes pulse-light {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.3); }
+          }
+          /* Custom overrides for seamless dark-mode matching */
+          .dark .fallback-wrapper {
+            background: #070a13 !important;
+          }
+          .dark .fallback-wrapper h1 {
+            color: #f1f5f9 !important;
+          }
+          .dark .fallback-wrapper p {
+            color: #475569 !important;
+          }
+        </style>
+      </div>
+    </div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

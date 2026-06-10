@@ -1,0 +1,10 @@
+{
+  "name": "Motlatsi AI 2.0",
+  "description": "An AI-powered educational ecosystem for Lesotho. Features a bulk-planner for teachers and a gamified 'Arcade' experience for students, turning the curriculum into a series of interactive battles and games.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

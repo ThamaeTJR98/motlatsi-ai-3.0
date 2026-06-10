@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "Extends firebase auth variables with critical roles and user settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Auth user ID" },
+        "name": { "type": "string", "description": "Display name of user" },
+        "email": { "type": "string", "description": "Email address of user" },
+        "role": { "type": "string", "enum": ["student", "teacher", "parent", "admin"], "description": "Aesthetic role of user" },
+        "school": { "type": "string", "description": "School name" },
+        "current_grade": { "type": "string", "description": "Grade of enrollment" },
+        "ai_credits": { "type": "integer", "description": "System allocated credits" },
+        "is_demo": { "type": "boolean", "description": "Demonstration flow indicator" },
+        "completed_topics": { "type": "array", "description": "Array of completed subjects" },
+        "linked_student_ids": { "type": "array", "description": "Verified linked learner IDs" },
+        "parent_link_code": { "type": "string", "description": "Unique linkage identification token" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Datetime of profile creation" }
+      },
+      "required": ["id", "name", "role"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "High fidelity gamified event and mastery record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "System unique record ID" },
+        "user_id": { "type": "string", "description": "Student identification ID" },
+        "action_type": { "type": "string", "description": "Type of event logging (e.g., topic_completed, assignment)" },
+        "details": { "type": "object", "description": "Details parameters of completed course" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Timestamp of action completion" }
+      },
+      "required": ["user_id", "action_type"]
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Weekly calendar schedules and study planner agenda",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Schedule slot ID" },
+        "user_id": { "type": "string", "description": "Owner identification ID" },
+        "day": { "type": "string", "description": "Day of the week" },
+        "time": { "type": "string", "description": "Hour range of study slot" },
+        "subject": { "type": "string", "description": "Subject title" },
+        "type": { "type": "string", "description": "Subject study status" },
+        "notes": { "type": "string", "description": "Optional memo" },
+        "linked_topic_id": { "type": "string", "description": "Target topic ID link" },
+        "is_auto_generated": { "type": "boolean", "description": "Auto scheduler flag" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Slot insertion date" }
+      },
+      "required": ["user_id", "day", "time", "subject"]
+    },
+    "SchoolSetting": {
+      "title": "SchoolSetting",
+      "description": "School level configurations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "School ID" },
+        "school": { "type": "string", "description": "School name" },
+        "settings": { "type": "object", "description": "School meta objects" }
+      },
+      "required": ["school"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Validation target for Firestore connection checks",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "description": "Verification status" }
+      },
+      "required": []
+    }
+  },
+  "firestore": {
+    "profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "User profiles database"
+    },
+    "activity_logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Student activity tracks and logs database"
+    },
+    "schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Calibrated learning planner schedules"
+    },
+    "school_settings/{settingId}": {
+      "schema": "SchoolSetting",
+      "description": "School setup parameters and configurations"
+    },
+    "test/{testId}": {
+      "schema": "ConnectionTest",
+      "description": "Used by the startup health check to verify database connectivity and access policies"
+    }
+  }
+}

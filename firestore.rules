@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global safety net - Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE SECURITY PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- ENTITY VALIDATORS ---
+    function isValidProfile(data) {
+      return data.keys().hasAll(['id', 'name', 'role']) &&
+             data.keys().size() <= 20 &&
+             data.id is string &&
+             data.name is string && data.name.size() <= 100 &&
+             data.role is string && (data.role == 'student' || data.role == 'teacher' || data.role == 'parent' || data.role == 'admin') &&
+             (!data.keys().hasAny(['email']) || (data.email is string && data.email.size() <= 150)) &&
+             (!data.keys().hasAny(['school']) || (data.school is string && data.school.size() <= 150)) &&
+             (!data.keys().hasAny(['current_grade']) || (data.current_grade is string && data.current_grade.size() <= 20)) &&
+             (!data.keys().hasAny(['ai_credits']) || data.ai_credits is int) &&
+             (!data.keys().hasAny(['is_demo']) || data.is_demo is bool) &&
+             (!data.keys().hasAny(['parent_link_code']) || (data.parent_link_code is string && data.parent_link_code.size() <= 100));
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['user_id', 'action_type']) &&
+             data.keys().size() <= 12 &&
+             data.user_id is string &&
+             data.action_type is string && data.action_type.size() <= 50;
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasAll(['user_id', 'day', 'time', 'subject']) &&
+             data.keys().size() <= 15 &&
+             data.user_id is string &&
+             data.day is string && data.day.size() <= 20 &&
+             data.time is string && data.time.size() <= 20 &&
+             data.subject is string && data.subject.size() <= 100;
+    }
+
+    function isValidSchoolSetting(data) {
+      return data.keys().hasAll(['school']) &&
+             data.keys().size() <= 10 &&
+             data.school is string && data.school.size() <= 150;
+    }
+
+    // --- COLLECTION RULES ---
+
+    // profiles Collection
+    match /profiles/{profileId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      allow create: if isSignedIn() && request.auth.uid == profileId && isValidProfile(incoming()) && incoming().role != 'admin';
+      
+      allow update: if isSignedIn() && (
+        (request.auth.uid == profileId && isValidProfile(incoming()) && incoming().role == existing().role) ||
+        (get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'teacher' && isValidProfile(incoming())) ||
+        (get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin' && isValidProfile(incoming()))
+      );
+      
+      allow delete: if isSignedIn() && (
+        request.auth.uid == profileId ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    // activity_logs Collection
+    match /activity_logs/{logId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      allow create: if isSignedIn() && isValidActivityLog(incoming()) && (
+        incoming().user_id == request.auth.uid || 
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'teacher' ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      );
+      
+      allow update: if isSignedIn() && isValidActivityLog(incoming()) && (
+        existing().user_id == request.auth.uid ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'teacher' ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      );
+      
+      allow delete: if isSignedIn() && (
+        existing().user_id == request.auth.uid ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    // schedules Collection
+    match /schedules/{scheduleId} {
+      allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      
+      allow create: if isSignedIn() && isValidSchedule(incoming()) && incoming().user_id == request.auth.uid;
+      allow update: if isSignedIn() && isValidSchedule(incoming()) && existing().user_id == request.auth.uid && incoming().user_id == request.auth.uid;
+      allow delete: if isSignedIn() && existing().user_id == request.auth.uid;
+    }
+
+    // school_settings Collection
+    match /school_settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin' ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'teacher'
+      ) && isValidSchoolSetting(incoming());
+    }
+
+    // test Collection for connection checks
+    match /test/{testId} {
+      allow read: if true;
+    }
+  }
+}

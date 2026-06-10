@@ -1,0 +1,527 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { AppView, Topic, ScheduleSlot } from '../types';
+import { curriculumData } from '../curriculum';
+import { ArrowLeft, Calendar, Check, ChevronDown, BookOpen, Target, Sparkles, Loader2, RefreshCw, Wand2, AlertCircle, Trash2, Clock, ChevronRight } from 'lucide-react';
+import { addDays, isWeekend, format, parseISO, eachDayOfInterval, isSameDay } from 'date-fns';
+import { useToast } from '../contexts/ToastContext';
+import { useLearningEngine } from '../contexts/LearningEngineContext';
+
+interface BulkUnitCreatorProps {
+  onNavigate: (view: AppView) => void;
+}
+
+export default function BulkUnitCreator({ onNavigate }: BulkUnitCreatorProps) {
+  const { addToast } = useToast();
+  const { refreshSchedule } = useLearningEngine();
+  const [step, setStep] = useState(1); // 1: Basics, 2: Content, 3: Review
+  const [loading, setLoading] = useState(false);
+
+  // Card Visibility State
+  const [isCurriculumOpen, setIsCurriculumOpen] = useState(true);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(true);
+
+  // Form State
+  const [unitName, setUnitName] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  
+  // Curriculum Selection State
+  const [selectedGrade, setSelectedGrade] = useState<string>('');
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
+  const [generatedSlots, setGeneratedSlots] = useState<ScheduleSlot[]>([]);
+
+  // Scheduling Preferences
+  const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  const [defaultTime, setDefaultTime] = useState('09:00');
+
+  // Derived Data
+  const grades = useMemo(() => {
+    const primary = curriculumData.primary.map(g => ({ label: `Grade ${g.grade}`, value: g.grade, type: 'primary' }));
+    const highSchool = curriculumData.highSchool.map(g => ({ label: g.grade, value: g.grade, type: 'highSchool' }));
+    return [...primary, ...highSchool];
+  }, []);
+
+  const subjects = useMemo(() => {
+    if (!selectedGrade) return [];
+    const pGrade = curriculumData.primary.find(g => g.grade === selectedGrade);
+    if (pGrade) return pGrade.subjects;
+    
+    const hGrade = curriculumData.highSchool.find(g => g.grade === selectedGrade);
+    if (hGrade) return hGrade.subjects;
+    
+    return [];
+  }, [selectedGrade]);
+
+  const topics = useMemo(() => {
+    if (!selectedSubject) return [];
+    const subjectData = subjects.find(s => s.name === selectedSubject);
+    return subjectData ? subjectData.topics : [];
+  }, [selectedSubject, subjects]);
+
+  // Handlers
+  const handleTopicSelect = (topicId: string) => {
+    const topic = topics.find(t => t.id === topicId) || null;
+    setSelectedTopic(topic);
+    setSelectedObjectives(topic?.learningObjectives || []); // Default to all objectives
+    
+    // Auto-fill Unit Name if empty
+    if (topic && !unitName) {
+      setUnitName(`${topic.title} Unit`);
+    }
+  };
+
+  const toggleDay = (day: string) => {
+    setSelectedDays(prev => 
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
+
+  const toggleObjective = (obj: string) => {
+    setSelectedObjectives(prev => 
+      prev.includes(obj) ? prev.filter(o => o !== obj) : [...prev, obj]
+    );
+  };
+
+  const generateSmartName = () => {
+    if (!selectedTopic) return;
+    const prefixes = ['Unit:', 'Module:', 'Focus:', 'Mastery:'];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    setUnitName(`${prefix} ${selectedTopic.title}`);
+  };
+
+  const previewUnit = () => {
+    if (!startDate || !endDate) {
+        addToast("Please select a date range first.", "error");
+        return;
+    }
+
+    const start = parseISO(startDate);
+    const end = parseISO(endDate);
+    
+    if (start > end) {
+        addToast("Start date cannot be after end date.", "error");
+        return;
+    }
+
+    const days = eachDayOfInterval({ start, end });
+    const newSlots: ScheduleSlot[] = [];
+    let objectiveIndex = 0;
+
+    days.forEach((day, index) => {
+        const dayName = format(day, 'EEE');
+        if (!selectedDays.includes(dayName)) return;
+
+        const objective = selectedObjectives.length > 0 
+            ? selectedObjectives[objectiveIndex % selectedObjectives.length] 
+            : 'General Review';
+        
+        objectiveIndex++;
+
+        const slot: ScheduleSlot = {
+            id: `bulk-preview-${Date.now()}-${index}`,
+            day: dayName,
+            date: format(day, 'yyyy-MM-dd'),
+            time: defaultTime,
+            subject: selectedSubject || "General",
+            grade: selectedGrade,
+            type: 'class',
+            location: 'Classroom 1A',
+            notes: `Unit: ${unitName}\nFocus: ${objective}`,
+            autoGenerated: true,
+            linkedTopicId: selectedTopic?.id
+        };
+        newSlots.push(slot);
+    });
+
+    if (newSlots.length === 0) {
+        addToast("No lessons generated. Check your date range and selected days.", "info");
+        return;
+    }
+
+    setGeneratedSlots(newSlots);
+    setStep(3);
+  };
+
+  const handleCreate = async () => {
+    setLoading(true);
+    
+    // Simulate processing time
+    setTimeout(() => {
+        try {
+            // 1. Save to Local Storage (Simulating Backend Persistence)
+            const existingScheduleStr = localStorage.getItem('motlatsi_schedule');
+            const existingSchedule: ScheduleSlot[] = existingScheduleStr ? JSON.parse(existingScheduleStr) : [];
+            
+            // Map preview slots to final slots (remove preview IDs)
+            const finalSlots = generatedSlots.map(s => ({
+                ...s,
+                id: `bulk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+            }));
+            
+            const updatedSchedule = [...existingSchedule, ...finalSlots];
+            localStorage.setItem('motlatsi_schedule', JSON.stringify(updatedSchedule));
+
+            // 2. Refresh Context
+            refreshSchedule();
+
+            // 3. Navigate to the main Scheduler
+            setLoading(false);
+            addToast(`Successfully generated ${finalSlots.length} lessons for ${unitName}`, "success");
+            onNavigate('scheduler'); 
+            
+        } catch (error) {
+            console.error("Failed to generate schedule", error);
+            setLoading(false);
+            addToast("Failed to save unit plan.", "error");
+        }
+    }, 1000);
+  };
+
+  const removeSlot = (id: string) => {
+    setGeneratedSlots(prev => prev.filter(s => s.id !== id));
+  };
+
+  const isFormValid = unitName && startDate && endDate && selectedTopic && selectedObjectives.length > 0;
+
+  return (
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-900 overflow-y-auto">
+      {/* Header */}
+      <header className="shrink-0 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-4 sticky top-0 z-10">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => {
+                if (step > 1) setStep(step - 1);
+                else onNavigate('bulk-planner-dashboard');
+            }}
+            className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">New Bulk Unit</h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Step {step} of 3</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 p-4 md:p-6 max-w-2xl mx-auto w-full space-y-4">
+        
+        {step === 1 && (
+            <>
+                {/* Step 1: Curriculum & Objectives */}
+                <section className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden transition-all duration-300">
+                    <div className="w-full flex items-center justify-between p-6 text-left">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                <BookOpen size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Curriculum Alignment</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Select content from the official curriculum.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 pt-0 space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Grade</label>
+                                <div className="relative">
+                                    <select 
+                                        value={selectedGrade}
+                                        onChange={(e) => {
+                                            setSelectedGrade(e.target.value);
+                                            setSelectedSubject('');
+                                            setSelectedTopic(null);
+                                        }}
+                                        className="w-full appearance-none bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                                    >
+                                        <option value="">Select Grade</option>
+                                        {grades.map(g => (
+                                            <option key={g.value} value={g.value}>{g.label}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Subject</label>
+                                <div className="relative">
+                                    <select 
+                                        value={selectedSubject}
+                                        onChange={(e) => {
+                                            setSelectedSubject(e.target.value);
+                                            setSelectedTopic(null);
+                                        }}
+                                        disabled={!selectedGrade}
+                                        className="w-full appearance-none bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium disabled:opacity-50"
+                                    >
+                                        <option value="">Select Subject</option>
+                                        {subjects.map(s => (
+                                            <option key={s.name} value={s.name}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Topic</label>
+                            <div className="relative">
+                                <select 
+                                    value={selectedTopic?.id || ''}
+                                    onChange={(e) => handleTopicSelect(e.target.value)}
+                                    disabled={!selectedSubject}
+                                    className="w-full appearance-none bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium disabled:opacity-50"
+                                >
+                                    <option value="">Select Topic</option>
+                                    {topics.map(t => (
+                                        <option key={t.id} value={t.id}>{t.title}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                            </div>
+                        </div>
+
+                        {selectedTopic && (
+                            <div className="space-y-3 pt-2 animate-in fade-in slide-in-from-top-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Learning Objectives</label>
+                                    <span className="text-xs text-blue-600 font-medium">{selectedObjectives.length} selected</span>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-2 max-h-60 overflow-y-auto space-y-1">
+                                    {(selectedTopic.learningObjectives || []).map((obj, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => toggleObjective(obj)}
+                                            className={`w-full text-left p-3 rounded-lg text-sm transition-all flex items-start gap-3 ${
+                                                selectedObjectives.includes(obj)
+                                                ? 'bg-white dark:bg-slate-800 shadow-sm ring-1 ring-blue-500 text-gray-900 dark:text-white'
+                                                : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500 dark:text-gray-400'
+                                            }`}
+                                        >
+                                            <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                                selectedObjectives.includes(obj) 
+                                                ? 'bg-blue-500 border-blue-500 text-white' 
+                                                : 'border-gray-300 dark:border-slate-600'
+                                            }`}>
+                                                {selectedObjectives.includes(obj) && <Check size={10} strokeWidth={4} />}
+                                            </div>
+                                            <span className="leading-snug">{obj}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+                <div className="flex justify-end">
+                    <button 
+                        onClick={() => setStep(2)}
+                        disabled={!selectedTopic || selectedObjectives.length === 0}
+                        className="bg-teacherBlue hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                    >
+                        Next: Unit Details <ChevronRight size={20} />
+                    </button>
+                </div>
+            </>
+        )}
+
+        {step === 2 && (
+            <>
+                {/* Step 2: Logistics */}
+                <section className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden transition-all duration-300">
+                    <div className="w-full flex items-center justify-between p-6 text-left">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                                <Target size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Unit Details</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Define the scope and timing.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 pt-0 space-y-6">
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Unit Name</label>
+                                {selectedTopic && (
+                                    <button 
+                                        onClick={generateSmartName}
+                                        className="text-[10px] font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 bg-purple-50 dark:bg-purple-900/30 px-2 py-1 rounded-md transition-colors"
+                                    >
+                                        <Wand2 size={10} />
+                                        Smart Rename
+                                    </button>
+                                )}
+                            </div>
+                            <input 
+                                type="text"
+                                value={unitName}
+                                onChange={(e) => setUnitName(e.target.value)}
+                                placeholder="e.g., Term 1: Introduction to Algebra"
+                                className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium placeholder:text-gray-400"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Start Date</label>
+                                <div className="relative">
+                                    <input 
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium appearance-none"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">End Date</label>
+                                <div className="relative">
+                                    <input 
+                                        type="date"
+                                        value={endDate}
+                                        min={startDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium appearance-none"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Lesson Days</label>
+                            <div className="flex flex-wrap gap-2">
+                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(day => (
+                                    <button
+                                        key={day}
+                                        onClick={() => toggleDay(day)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                                            selectedDays.includes(day)
+                                            ? 'bg-purple-600 text-white shadow-md'
+                                            : 'bg-gray-100 dark:bg-slate-900 text-gray-500 dark:text-gray-400 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        {day}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Default Start Time</label>
+                            <div className="relative">
+                                <input 
+                                    type="time"
+                                    value={defaultTime}
+                                    onChange={(e) => setDefaultTime(e.target.value)}
+                                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+                                />
+                                <Clock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div className="flex justify-between">
+                    <button 
+                        onClick={() => setStep(1)}
+                        className="text-gray-500 font-bold py-3 px-6 rounded-xl hover:bg-gray-100 transition-all"
+                    >
+                        Back
+                    </button>
+                    <button 
+                        onClick={previewUnit}
+                        disabled={!unitName || !startDate || !endDate || selectedDays.length === 0}
+                        className="bg-teacherBlue hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                    >
+                        Preview Unit <Sparkles size={20} />
+                    </button>
+                </div>
+            </>
+        )}
+
+        {step === 3 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                <Sparkles size={20} />
+                            </div>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Review Unit Plan</h2>
+                        </div>
+                        <button 
+                            onClick={() => setGeneratedSlots([])}
+                            className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                            Clear All
+                        </button>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">We've generated {generatedSlots.length} lessons based on your preferences. You can remove individual lessons before finalizing.</p>
+                </div>
+
+                <div className="space-y-3">
+                    {generatedSlots.map((slot, idx) => (
+                        <div key={slot.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm flex items-center justify-between group">
+                            <div className="flex items-center gap-4">
+                                <div className="text-center min-w-[60px]">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase">{slot.day}</p>
+                                    <p className="text-lg font-black text-gray-900 dark:text-white">{slot.date ? format(parseISO(slot.date), 'dd') : '--'}</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase">{slot.date ? format(parseISO(slot.date), 'MMM') : '--'}</p>
+                                </div>
+                                <div className="h-10 w-px bg-gray-100 dark:bg-slate-700"></div>
+                                <div>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                        {slot.notes?.includes('Focus: ') 
+                                            ? slot.notes.split('Focus: ')[1] 
+                                            : slot.notes?.split('\n')[0] || 'Lesson'}
+                                    </p>
+                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        <Clock size={12} /> {slot.time}
+                                        <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                        {slot.location}
+                                    </div>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => removeSlot(slot.id)}
+                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="sticky bottom-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg flex items-center justify-between gap-4 z-20">
+                    <button 
+                        onClick={() => setStep(2)}
+                        className="text-gray-500 font-bold py-3 px-6 rounded-xl hover:bg-gray-100 transition-all"
+                    >
+                        Back
+                    </button>
+                    <button 
+                        onClick={handleCreate}
+                        disabled={loading || generatedSlots.length === 0}
+                        className="flex-1 bg-teacherBlue hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {loading ? <Loader2 className="animate-spin" size={20} /> : <Check size={20} />}
+                        {loading ? 'Finalizing...' : `Confirm & Add ${generatedSlots.length} Lessons`}
+                    </button>
+                </div>
+            </div>
+        )}
+      </main>
+    </div>
+  );
+}
